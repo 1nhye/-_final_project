@@ -9,6 +9,58 @@ import torch
 from torch.utils.data import Dataset
 
 
+from PIL import Image
+import os
+import numpy as np
+import torch
+from torch.utils.data import Dataset
+
+class SingleVideoClips(Dataset):
+    """Dataset class for a single video with cropped mouths"""
+    def __init__(
+            self,
+            video_path,
+            frames_per_clip,
+            grayscale=False,
+            transform=None,
+    ):
+        self.frames_per_clip = frames_per_clip
+        self.grayscale = grayscale
+        self.transform = transform
+        self.frames = sorted(os.listdir(video_path))  # Load all frame filenames
+        self.video_path = video_path
+        self.num_clips = len(self.frames) // frames_per_clip  # Calculate total clips
+
+    def __len__(self):
+        return self.num_clips
+
+    def get_clip(self, idx):
+        """Retrieve a single clip based on its index."""
+        start_idx = idx * self.frames_per_clip
+        end_idx = start_idx + self.frames_per_clip
+
+        sample = []
+        for i in range(start_idx, end_idx):
+            with Image.open(os.path.join(self.video_path, self.frames[i])) as pil_img:
+                if self.grayscale:
+                    pil_img = pil_img.convert("L")
+                img = np.array(pil_img)
+            sample.append(img)
+        sample = np.stack(sample)
+
+        return sample
+
+    def __getitem__(self, idx):
+        """Return a processed clip."""
+        sample = self.get_clip(idx)
+        sample = torch.from_numpy(sample).unsqueeze(-1)  # Add a channel dimension
+        if self.transform:
+            sample = self.transform(sample)
+
+        # No label since it's inference
+        return sample, idx
+
+
 class ForensicsClips(Dataset):
     """Dataset class for FaceForensics++, FaceShifter, and DeeperForensics. Supports returning only a subset of forgery
     methods in dataset"""

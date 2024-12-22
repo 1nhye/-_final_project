@@ -64,7 +64,7 @@ def parse_args():
         choices=["c0", "c23", "c40"],
         default="c23",
     )
-    parser.add_argument("--mean-face", default="./preprocessing/20words_mean_face.npy", help="Mean face pathname")
+    parser.add_argument("--mean-face", default="/root/LipForensics/preprocessing/20words_mean_face.npy", help="Mean face pathname")
     parser.add_argument("--crop-width", default=96, type=int, help="Width of mouth ROIs")
     parser.add_argument("--crop-height", default=96, type=int, help="Height of mouth ROIs")
     parser.add_argument("--start-idx", default=48, type=int, help="Start of landmark index for mouth")
@@ -116,13 +116,56 @@ def crop_video_and_save(video_path, landmarks_dir, target_dir, mean_face_landmar
             cur_frame = q_frames.popleft()
             cur_name = q_name.popleft()
 
+            # Remove extra dimension if present
+            smoothed_landmarks = np.squeeze(smoothed_landmarks)
+            if smoothed_landmarks.ndim != 2 or smoothed_landmarks.shape[0] != 68:
+                print("Error: smoothed_landmarks does not have the expected shape after squeezing.")
+                return
+
+            ''' # Print debugging information
+            print("Debugging Information:")
+            print(f"Frame Name: {cur_name}")
+            print(f"Current Frame Shape: {cur_frame.shape}")
+            print(f"smoothed_landmarks Shape: {smoothed_landmarks.shape}")
+            print(f"mean_face_landmarks Shape: {mean_face_landmarks.shape}")
+            print(f"STABLE_POINTS: {STABLE_POINTS}")
+
+            # Check the landmarks data at specific indices
+            try:
+                print("smoothed_landmarks at STABLE_POINTS:", smoothed_landmarks[STABLE_POINTS, :])
+                print("mean_face_landmarks at STABLE_POINTS:", mean_face_landmarks[STABLE_POINTS, :])
+            except IndexError as e:
+                print(f"IndexError encountered: {e}")'''
+
+            
+
             # Get aligned frame as well as affine transformation that produced it
             trans_frame, trans = warp_img(
                 smoothed_landmarks[STABLE_POINTS, :], mean_face_landmarks[STABLE_POINTS, :], cur_frame, STD_SIZE
             )
 
+            # Ensure cur_landmarks has exactly (68, 2) shape
+            cur_landmarks = np.squeeze(cur_landmarks)
+            if cur_landmarks.ndim != 2 or cur_landmarks.shape[1] != 2:
+                print(f"Unexpected shape for cur_landmarks: {cur_landmarks.shape}. Reshaping to (68, 2)")
+                cur_landmarks = cur_landmarks.reshape(-1, 2)
+
+            # Debugging print to confirm the shape
+            print(f"Processing frame {cur_name}")
+            print(f"cur_landmarks shape before transformation: {cur_landmarks.shape}")
+            
+
+
             # Apply that affine transform to the landmarks
-            trans_landmarks = trans(cur_landmarks)
+            #trans_landmarks = trans(cur_landmarks)
+
+            try:
+                trans_landmarks = trans(cur_landmarks)
+            except Exception as e:
+                print(f"Skipping frame {cur_name} due to error: {e}")
+                continue
+
+
 
             # Crop mouth region
             cropped_frame = cut_patch(

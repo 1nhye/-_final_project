@@ -5,8 +5,8 @@ import json
 import torch
 import torch.nn as nn
 
-from .resnet import ResNet, BasicBlock
-from .tcn import MultibranchTemporalConvNet
+from resnet import ResNet, BasicBlock
+from tcn import MultibranchTemporalConvNet
 
 
 def load_json(json_fp):
@@ -26,7 +26,7 @@ def get_model(weights_forgery_path=None, device="cuda:0"):
     device : str
         Device to put model on
     """
-    args_loaded = load_json("./models/configs/lrw_resnet18_mstcn.json")
+    args_loaded = load_json("/root/LipForensics/models/configs/lrw_resnet18_mstcn.json")
     relu_type = args_loaded["relu_type"]
     tcn_options = {
         "num_layers": args_loaded["tcn_num_layers"],
@@ -40,7 +40,8 @@ def get_model(weights_forgery_path=None, device="cuda:0"):
 
     # load weights learned during face forgery detection
     if weights_forgery_path is not None:
-        checkpoint_dict = torch.load(weights_forgery_path, map_location=lambda storage, loc: storage.cuda(device))
+        device = torch.device(device)
+        checkpoint_dict = torch.load(weights_forgery_path, map_location=device)
         model.load_state_dict(checkpoint_dict["model"])
         print("Face forgery weights loaded.")
     else:

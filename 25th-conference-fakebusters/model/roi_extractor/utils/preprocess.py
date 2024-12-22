@@ -72,9 +72,30 @@ class VideoROIExtractor:
         """
         비디오 파일 읽어 프레임 이미지 배열로 반환.
         """
-        videogen = skvideo.io.vread(self.input_video_path)
-        frames = np.array([frame for frame in videogen])
-        self.frames = frames
+        frames = []
+        cap = cv2.VideoCapture(self.input_video_path)   # 비디오 파일 열기
+        if not cap.isOpened():
+            raise ValueError(f"Unable to open video file: {self.input_video_path}")
+
+        # 비디오 속성 가져오기
+        fps = int(cap.get(cv2.CAP_PROP_FPS))  # FPS 가져오기
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # 총 프레임 수
+
+        with tqdm(total=total_frames, desc="Processing Frames", unit="frame") as pbar:
+            while cap.isOpened():
+                ret, frame = cap.read()  # 프레임 읽기
+                if not ret:  # 더 이상 프레임이 없으면 종료
+                    break
+                frames.append(frame)  # 프레임 저장
+                pbar.update(1)  # 진행도 업데이트
+
+        cap.release()  # 비디오 파일 닫기
+
+        if not frames:  # 프레임이 비어 있으면 에러 발생
+            raise ValueError(f"No frames could be read from video: {self.input_video_path}")
+
+        self.frames = np.array(frames)  # 리스트를 NumPy 배열로 변환
+
 
     def yield_frame(self):
         """
@@ -150,7 +171,9 @@ class VideoROIExtractor:
         original_frame_width = frame.shape[1]
 
         ## 빠른 연산을 위한 프레임 리사이징 후 그레이스케일 변환.
+        
         resize_dim = (self.resized_frame_width, self.resized_frame_height, )
+
         resized_frame = cv2.resize(frame, resize_dim)
         gray = cv2.cvtColor(resized_frame, cv2.COLOR_RGB2GRAY)
         del(frame)
@@ -472,6 +495,7 @@ class VideoROIExtractor:
         pbar.close()
         return np.array(sequence)
 
+    
     ## ======================================================================
     ## ==============================  PROCESS  =============================
     ## ======================================================================
@@ -487,23 +511,47 @@ class VideoROIExtractor:
         ## 랜드마크 추출
         landmarks = []
         ## 프로세스 트래킹을 위한 프로그레스 바 설정.
+        #print('self.frames:', self.frames)
         with tqdm(total=len(self.frames), desc="랜드마크 추출", leave=False) as pbar:
             for frame in self.frames:
                 if self.current_frames % self.skip_frames != 0:
                     self.current_frames+=1
                     landmarks.append(None)
                 else:
+                    #print('skip_frames', self.skip_frames)
                     self.current_frames+=1
                     landmark = self.detect_landmark(frame)
                     landmarks.append(landmark)
                 pbar.update(1)
-
+        #print('landmarks:', landmarks)
         ## 랜드마크 보간
         preprocessed_landmarks = self.landmarks_interpolate(landmarks)
+
+        #print('preprocessed_landmarks:', preprocessed_landmarks)
 
         ## ROI 패치 자르기
         rois = self.crop_patch2(landmarks=preprocessed_landmarks)
         return rois
+    
+    def save_frames(self, rois: np.ndarray):
+        """
+        ROI 배열을 개별 이미지 파일로 저장.
+        
+        Args:
+            rois: ROI로 잘린 프레임 배열 (num_frames, height, width, channels)
+        """
+        video_name = os.path.splitext(os.path.basename(self.input_video_path))[0]
+        output_dir = os.path.join('/root/', f"{video_name}_frames")
+
+        # 디렉토리 생성
+        os.makedirs(output_dir, exist_ok=True)
+
+        # 프레임 저장
+        for idx, roi in enumerate(rois):
+            output_path = os.path.join(output_dir, f"frame_{idx:04d}.png")
+            cv2.imwrite(output_path, roi)
+        
+        return output_dir
         
     ## ======================================================================
     ## ==============================   MAIN   ==============================
