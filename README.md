@@ -24,3 +24,5 @@
 3. 실시간 딥페이크 탐지 서비스 구현
 
 
+## How to run
+`python final_inference_roi.py --video_path ./chimchak.mp4 --config_path /root/THEORY-AND-PRACTICE-OF-DEEP-LEARNING_final_project/25th-conference-fakebusters/model/roi_extractor/config.yaml`
